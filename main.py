@@ -1,208 +1,235 @@
-from random import randint, choices
-from itertools import chain
+class Building:
+    floors = {}
 
+    def __init__(self, floors):
+        for i in range(1, floors + 1):
+            self.floors[i] = Floor(self, i)
+
+    def __getitem__(self, floor):
+        return self.floors[floor]
+
+    @property
+    def max_floor(self):
+        return list(self.floors.keys())[-1]
+
+    @property
+    def min_floor(self):
+        return list(self.floors.keys())[0]
+
+
+class Floor:
+
+    def __init__(self, Building_Instance, floor):
+        self.Building = Building_Instance
+        self.floor = floor
+        self.passengers = []
+
+    @property
+    def floor_directions(self):
+        return [x.direction for x in self.passengers]
+
+    @property
+    def floor_destinations(self):
+        return [x.DestinationFloor.floor for x in self.passengers]
+
+    @property
+    def frequent_direction(self):
+        directions = self.floor_directions
+        if directions.count('UP') == directions.count('DOWN'):
+            return None
+        else:
+            return max(set(directions), key=directions.count)
+
+
+class Passenger:
+
+    class DestinationError(Exception):
+        def __init__(self, message):
+            self.message = message
+            super().__init__(self.message)
+
+        def __str__(self):
+            return f'[!] {self.message}'
+
+    def __init__(self, Floor_Instance, Destination_Floor_Instance):
+        self.Floor = Floor_Instance
+        self.Floor.passengers.append(self)
+
+        if Destination_Floor_Instance.floor == self.Floor.floor:
+            raise self.DestinationError("Destination is same as a floor.")
+        elif (
+            Destination_Floor_Instance.floor < self.Floor.Building.min_floor
+            or
+            Destination_Floor_Instance.floor > self.Floor.Building.max_floor
+        ):
+            raise self.DestinationError("Destination is out of bound.")
+        else:
+            self.DestinationFloor = Destination_Floor_Instance
+
+    @property
+    def direction(self):
+        if self.DestinationFloor.floor < self.Floor.floor:
+            return 'DOWN'
+        else:
+            return 'UP'
 
 
 class Elevator:
-    #generation and inheritance variables
-    min_floor_gen = 5
-    max_floor_gen = 10
-    pass_per_floor_gen = 10
+    direction_bool = True
     capacity = 5
+    destination = None
 
-    __current_floor = 1
-    __current_passengers = []
-    __floors_schema = None
-    __directions = {
-        0: 'DOWN',
-        1: 'UP'
-    }
-    __current_direction = __directions[1]
-    __elevator_destination = None
-
+    def __init__(self, Building_Instance):
+        self.Building = Building_Instance
+        self.Floor = Building_Instance[Building_Instance.min_floor]
+        self.passengers = []
 
     @property
-    def floors_queue_len(self):
-        return len(list(chain(*self.__floors_schema.values())))
-
+    def passengers_queue(self):
+        return sum([len(i.passengers) for i in self.Building.floors.values()])
 
     @property
     def space_left(self):
-        return self.capacity - len(self.__current_passengers)
-
-
-    @property
-    def floor_passengers(self):
-        return self.__floors_schema[self.__current_floor]
-
+        return self.capacity - len(self.passengers)
 
     @property
-    def floor_passengers_directions(self):
-        return [x[1] for x in self.__floors_schema[self.__current_floor]]
-
-    
-    @property
-    def current_passengers_destinations(self):
-        return [x[0] for x in self.__current_passengers]
-
-
-
-    #sets random floor height based on min and max floor generator values
-    def __init__(self, passengers_autogen=False):
-        self.floors = randint(self.min_floor_gen, self.max_floor_gen)
-        self.__floors_schema = self.gen_floors_schema(autogen=passengers_autogen)
-
-
-    #generates floors schema with fake passengers data if autogen = True
-    def gen_floors_schema(self, autogen):
-        data = {}
-
-        if not autogen:
-            pass_per_floor = 0
+    def direction(self):
+        if self.direction_bool:
+            return 'UP'
         else:
-            pass_per_floor = self.pass_per_floor_gen
+            return 'DOWN'
 
-        for i in range(1, self.floors + 1):
-            passenger_floor_choices = list(range(1, self.floors + 1))
-            passenger_floor_choices.remove(i)
-            passengers = []
-
-            for _ in range(randint(0, pass_per_floor)):
-                passenger_floor_choice = choices(passenger_floor_choices)[0]
-                passengers.append(
-                    (
-                        passenger_floor_choice,
-                        self.__directions[int(i < passenger_floor_choice)]
-                    )
-                )
-
-            data[i] = passengers
-        
-        return data
-
-
-    #move based on direction
-    def move(self):
-        if self.__current_direction == 'UP':
-            self.__current_floor += 1
-        else:
-            self.__current_floor -= 1
-        self.render()
-
-
-
-    def set_elevator_destination(self):
-        if self.__current_direction == 'UP':
-            self.__elevator_destination = max(self.current_passengers_destinations, default=self.__elevator_destination)
-        else:
-            self.__elevator_destination = min(self.current_passengers_destinations, default=self.__elevator_destination)
-
-    
-
-    #finds best floor choice for next iteration when current floor is empty
-    def find_boundary_floor(self):
-        step = 1 if self.__current_direction == 'UP' else -1
-        for i in list(range(1, self.floors+1))[::step]:
-            for j in self.__floors_schema[i]:
-                if j[1] == self.__current_direction:
-                    return i
-                else:
-                    self.toggle_direction()
-                    return self.find_boundary_floor()
-        
-    
+    def render(self):
+        print('\n')
+        for floor in list(self.Building.floors.values())[::-1]:
+            flag = ">" if floor == self.Floor else " "
+            print(f'{flag}floor: {floor.floor} p: {floor.floor_destinations}')
 
     def toggle_direction(self):
-        toggle_to = list(self.__directions.values())
-        toggle_to.remove(self.__current_direction)
-        self.__current_direction = toggle_to[0]
-        return self.__current_direction
-        
+        self.direction_bool = not self.direction_bool
 
-    #removes passengers from schema and append in current passengers
-    #checks if enough space and directions are equals
-    #log on enter
+    def move(self):
+        if self.direction_bool:
+            self.Floor = self.Floor.Building[self.Floor.floor + 1]
+        else:
+            self.Floor = self.Floor.Building[self.Floor.floor - 1]
+
+    def set_destination(self):
+        if self.direction_bool:
+            self.destination = max(
+                [x.DestinationFloor for x in self.passengers],
+                key=lambda item: item.floor,
+                default=None
+            )
+        else:
+            self.destination = min(
+                [x.DestinationFloor for x in self.passengers],
+                key=lambda item: item.floor,
+                default=None
+            )
+
     def passengers_load(self):
-        if self.floor_passengers != []:
-            while self.space_left > 0 and self.__current_direction in self.floor_passengers_directions:
-                for i in range(len(self.floor_passengers)):
-                    if self.floor_passengers[i][1] == self.__current_direction:
-                        print(f"{self.floor_passengers[i]} entered!")
-                        self.__current_passengers.append(
-                            self.__floors_schema[self.__current_floor].pop(i)
-                        )
-                        break
-
-
-
-    #removes all current passengers if floors are equals
-    #log on leave
-    def passengers_out(self):
-        while self.__current_floor in self.current_passengers_destinations:
-            for i in range(len(self.__current_passengers)):
-                if self.__current_passengers[i][0] == self.__current_floor:
-                    print(f"{self.__current_passengers[i]} leaved!")
-                    del self.__current_passengers[i]
+        while (
+            self.space_left > 0
+            and
+            self.direction in [x.direction for x in self.Floor.passengers]
+        ):
+            for i in range(len(self.Floor.passengers)):
+                if self.Floor.passengers[i].direction == self.direction:
+                    self.passengers.append(self.Floor.passengers.pop(i))
+                    print('Append!')
                     break
 
-    
-    #renders elevator state
-    def render(self):
-        print("\n")
-        for key in list(self.__floors_schema.keys())[::-1]:
-            e_floor = ">" if key == self.__current_floor else " "
-            print(f"{e_floor} floor: {key} p: {self.__floors_schema[key]}")
+    def passengers_out(self):
+        while self.Floor in [x.DestinationFloor for x in self.passengers]:
+            for i in range(len(self.passengers)):
+                if self.passengers[i].DestinationFloor == self.Floor:
+                    del self.passengers[i]
+                    print('Leaved!')
+                    break
 
-                
-    
-    def run(self):
+    def set_boundary_call(self):
+        longest_up, longest_down = None, None
 
-        #renders initial state
-        self.render()
-        self.__current_floor = self.find_boundary_floor()
-        if self.__current_floor != 1:
-            self.render()
+        for floor in self.Building.floors.values():
+            direction_chocices = set(floor.floor_directions)
 
-        #loops while no passengers left
-        while self.floors_queue_len != 0:
+            if 'UP' in direction_chocices:
+                if longest_up:
+                    if floor.floor < longest_up:
+                        longest_up = floor.floor
+                else:
+                    longest_up = floor.floor
 
-            #loops while reaches destination
-            destination_dummy = self.floors if self.__current_direction == 'UP' else 1
-            while self.__current_floor != (self.__elevator_destination or destination_dummy):
-                self.passengers_out()
-                
-                if self.__current_floor != self.__elevator_destination:
-                    self.passengers_load()
-                    self.set_elevator_destination()
-                
-                self.move()
-            
-            self.passengers_out()
-            self.__elevator_destination = None
+            if 'DOWN' in direction_chocices:
+                if longest_down:
+                    if floor.floor > longest_down:
+                        longest_down = floor.floor
+                else:
+                    longest_down = floor.floor
 
-            #destination floor not empty scenario
-            if self.floor_passengers != []:
-                directions = [x[1] for x in self.floor_passengers]
-                #if UP and DOWN passengers directions are equals leave same elevator direction
-                if directions.count('UP') == directions.count('DOWN'):
-                    pass
-                #counts most frequent direction choice, then compares to current elevator direction
-                #if not equal -> toggle, else leaves same value
-                elif self.__current_direction != max(set(directions), key = directions.count):
-                    self.toggle_direction()
-                continue
-            #destination floor empty scenario
+        if longest_down is None:
+            self.destination = self.Building[longest_up]
+        elif longest_up is None:
+            self.destination = self.Building[longest_down]
+        else:
+            if (
+                abs(self.Floor.floor - longest_up)
+                <
+                abs(self.Floor.floor - longest_down)
+            ):
+                self.destination = self.Building[longest_up]
             else:
-                self.__current_floor = self.find_boundary_floor()
-                self.render()
+                self.destination = self.Building[longest_down]
+
+        self.direction_bool = self.Floor.floor < self.destination.floor
+
+    def run(self):
+        self.render()
+        while self.passengers_queue > 0:
+
+            destination_dummy = (
+                self.Building[self.Building.max_floor]
+                if self.direction_bool
+                else self.Building[self.Building.min_floor]
+            )
+
+            if self.Floor.passengers:
+                while self.Floor != (
+                    self.destination or destination_dummy
+                ):
+                    self.passengers_out()
+                    self.passengers_load()
+                    self.set_destination()
+                    self.move()
+                    self.render()
+
+                self.passengers_out()
+                self.destination = None
+                if self.Floor.frequent_direction is None:
+                    pass
+                else:
+                    if self.Floor.frequent_direction != self.direction:
+                        self.toggle_direction()
+
                 continue
-
-            
-
-            
+            else:
+                self.set_boundary_call()
+                while self.Floor != self.destination:
+                    self.move()
+                    self.render()
 
 
 if __name__ == "__main__":
-    a = Elevator(passengers_autogen=True)
-    a.run()
-    
+    a = Building(6)
+    e = Elevator(a)
+    Passenger(a[2], a[3])
+    Passenger(a[4], a[3])
+    Passenger(a[6], a[4])
+    Passenger(a[6], a[4])
+    Passenger(a[6], a[4])
+    Passenger(a[6], a[4])
+    Passenger(a[6], a[4])
+    Passenger(a[6], a[4])
+
+    e.run()
